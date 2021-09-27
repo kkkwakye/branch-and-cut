@@ -1,0 +1,55 @@
+import numpy as np
+import matplotlib.pyplot as plt
+from gurobipy import Model, GRB, quicksum
+
+# this will try to fix the random number when seeded
+rnd = np.random
+rnd.seed(1)
+
+n = 10 # number of VRU
+xc = rnd.rand(n+1)*200 # randomly generating x-coordinates
+yc = rnd.rand(n+1)*100 # randomly generating y-coordinates
+
+# Visualizing the locations including the depot in red
+plt.plot(xc[0],yc[0], c='r', marker='s')
+plt.scatter(xc[1:], yc[1:], c='b')
+
+# parameters for the capacitated vehicle routing problem
+N = [i for i in range(1, n+1)] # number of VRUs
+V = [0] + N # total number of locations including the depot
+A = [(i,j) for i in V for j in V if i != j] # possible arcs
+c = {(i,j): np.hypot(xc[i]-xc[j], yc[i]-yc[j]) for (i,j) in A} # cost is associated to the Euclidean distance between i and j
+Q = 20 # maximum capacity of each vehicle
+q = {i: rnd.randint(1,10) for i in N} # number of VRUs at location i to be picked
+
+
+# Modeling proper using Gurobi
+
+model = Model('CVRP')
+
+# Declaration of variables
+x = model.addVars(A, vtype=GRB.BINARY)
+y = model.addVars(N, vtype=GRB.CONTINUOUS)
+
+# setting the objective function
+model.modelSense = GRB.MINIMIZE
+model.setObjective(quicksum(x[i,j]*c[i,j] for (i,j) in A))
+
+# Adding constraints
+model.addConstrs(quicksum(x[i,j] for j in V if j!=i) == 1 for i in N)
+model.addConstrs(quicksum(x[i,j] for i in V if i!=j) == 1 for j in N)
+model.addConstrs((x[i,j] == 1) >> (y[i] + q[i] == y[j]) for (i,j) in A if i != 0 and j != 0)
+model.addConstrs(y[i] >= q[i] for i in N)
+model.addConstrs(y[i] <= Q for i in N)
+
+# Optimizing the model
+model.optimize()
+
+# The active arcs after solving the CVRP
+active_arcs = [a for a in A if x[a].x > 0.99]
+
+# Plotting the arcs for visualization
+plt.plot(xc[0],yc[0], c='r', marker='s')
+plt.scatter(xc[1:], yc[1:], c='b')
+for (i,j) in active_arcs:
+    plt.plot([xc[i],xc[j]], [yc[i],yc[j]], c='g', zorder =0)
